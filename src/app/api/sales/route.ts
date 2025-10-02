@@ -5,6 +5,8 @@ import { auth } from "@/auth";
 import { desc, ilike, or, count, eq } from "drizzle-orm";
 import type { ApiResponse, PaginatedResponse, SaleWithDetails } from "@/types";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();

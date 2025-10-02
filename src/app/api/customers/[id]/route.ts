@@ -5,6 +5,9 @@ import { auth } from "@/auth";
 import { eq } from "drizzle-orm";
 import type { ApiResponse, Customer } from "@/types";
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

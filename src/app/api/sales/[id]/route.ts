@@ -5,6 +5,8 @@ import { auth } from "@/auth";
 import { eq } from "drizzle-orm";
 import type { ApiResponse, SaleWithDetails } from "@/types";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

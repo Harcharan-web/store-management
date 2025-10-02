@@ -5,6 +5,8 @@ import { auth } from "@/auth";
 import { count, eq, gte } from "drizzle-orm";
 import type { ApiResponse } from "@/types";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const session = await auth();
