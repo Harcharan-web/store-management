@@ -25,7 +25,7 @@ export default function StockOverview() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const observerTarget = useRef<HTMLDivElement>(null);
-  const searchTimeoutRef = useRef<NodeJS.Timeout>();
+  const searchTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   // Fetch products
   const fetchProducts = useCallback(

@@ -51,7 +51,6 @@ export async function POST(
           .set({
             quantityReturned: newQuantityReturned,
             returnDate: body.returnDate,
-            updatedAt: new Date(),
           })
           .where(eq(rentalItems.id, returnItem.id));
       }
@@ -83,7 +82,7 @@ export async function POST(
     const actualRentalCharges = parseFloat(body.actualRentalCharges) || 0;
     const lateFee = parseFloat(body.lateFee) || 0;
     const damageCharges = parseFloat(body.damageCharges) || 0;
-    const securityDeposit = body.depositReturned ? (parseFloat(rental.securityDeposit) || 0) : 0;
+    const securityDeposit = body.depositReturned ? (parseFloat(rental.securityDeposit || "0") || 0) : 0;
 
     // Calculate final amount
     const finalAmount = actualRentalCharges + lateFee + damageCharges - securityDeposit;

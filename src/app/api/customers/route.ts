@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
         or(
           ilike(customers.name, `%${search}%`),
           ilike(customers.phone, `%${search}%`),
-          ilike(customers.email, `%${search}%`)
+          ilike(customers.shortName, `%${search}%`)
         )
       );
     }
