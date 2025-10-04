@@ -7,6 +7,7 @@ import Select from "@/components/ui/select";
 import Textarea from "@/components/ui/textarea";
 import type { SaleWithDetails, SaleFormData, Customer, Product } from "@/types";
 import { PAYMENT_METHODS } from "@/lib/constants";
+import { formatCurrency } from "@/lib/utils";
 
 interface SaleFormProps {
   sale: SaleWithDetails | null;
@@ -14,25 +15,28 @@ interface SaleFormProps {
   onCancel: () => void;
 }
 
+interface SaleItem {
+  productId: string;
+  productName: string;
+  unit: string;
+  quantity: number;
+  unitPrice: string;
+  total: number;
+}
+
 const SaleForm: FC<SaleFormProps> = ({ sale, onSubmit, onCancel }) => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
-  const [formData, setFormData] = useState({
-    customerId: sale?.customerId || "",
-    productId: sale?.items[0]?.productId || "",
-    quantity: sale?.items[0]?.quantity || 1,
-    unitPrice: sale?.items[0]?.unitPrice || "",
-    totalPrice: sale?.total || "0",
-    paymentMethod: sale?.paymentMethod || "",
-    notes: sale?.notes || "",
-  });
+  const [customerId, setCustomerId] = useState(sale?.customerId || "");
+  const [items, setItems] = useState<SaleItem[]>([]);
+  const [paymentMethod, setPaymentMethod] = useState(sale?.paymentMethod || "");
+  const [notes, setNotes] = useState(sale?.notes || "");
 
+  const [productSearch, setProductSearch] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
-  const [productSearch, setProductSearch] = useState("");
-  const [showProductDropdown, setShowProductDropdown] = useState(false);
 
   // Load customers and products
   useEffect(() => {
@@ -51,7 +55,6 @@ const SaleForm: FC<SaleFormProps> = ({ sale, onSubmit, onCancel }) => {
         }
 
         if (productsData.success) {
-          // Filter products that can be sold (type is "sale" or "both")
           const saleableProducts = productsData.data.data.filter(
             (p: Product) => p.type === "sale" || p.type === "both"
           );
@@ -67,36 +70,50 @@ const SaleForm: FC<SaleFormProps> = ({ sale, onSubmit, onCancel }) => {
     loadData();
   }, []);
 
-  // Calculate total price when quantity or unit price changes
-  useEffect(() => {
-    const quantity = Number(formData.quantity) || 0;
-    const unitPrice = Number(formData.unitPrice) || 0;
-    const total = quantity * unitPrice;
-    setFormData((prev) => ({ ...prev, totalPrice: total.toFixed(2) }));
-  }, [formData.quantity, formData.unitPrice]);
-
-  const handleChange = useCallback(
-    (field: string, value: any) => {
-      setFormData((prev) => ({ ...prev, [field]: value }));
-      if (errors[field]) {
-        setErrors((prev) => ({ ...prev, [field]: "" }));
-      }
-    },
-    [errors]
-  );
-
-  const handleProductSelect = useCallback((productId: string) => {
+  const handleAddProduct = useCallback((productId: string) => {
     const product = products.find(p => p.id === productId);
-    if (product) {
-      setFormData((prev) => ({
-        ...prev,
-        productId: product.id,
-        unitPrice: product.salePrice || "",
-      }));
-      setProductSearch(product.name);
-      setShowProductDropdown(false);
+    if (!product) return;
+
+    // Check if product already added
+    if (items.some(item => item.productId === productId)) {
+      alert("This product is already added. Update the quantity instead.");
+      return;
     }
-  }, [products]);
+
+    const newItem: SaleItem = {
+      productId: product.id,
+      productName: product.name,
+      unit: product.unit || "piece",
+      quantity: 1,
+      unitPrice: product.salePrice || "0",
+      total: Number(product.salePrice || 0),
+    };
+
+    setItems([...items, newItem]);
+    setProductSearch("");
+  }, [products, items]);
+
+  const handleUpdateQuantity = useCallback((index: number, quantity: number) => {
+    const newItems = [...items];
+    newItems[index].quantity = quantity;
+    newItems[index].total = quantity * Number(newItems[index].unitPrice);
+    setItems(newItems);
+  }, [items]);
+
+  const handleUpdatePrice = useCallback((index: number, price: string) => {
+    const newItems = [...items];
+    newItems[index].unitPrice = price;
+    newItems[index].total = newItems[index].quantity * Number(price);
+    setItems(newItems);
+  }, [items]);
+
+  const handleRemoveItem = useCallback((index: number) => {
+    setItems(items.filter((_, i) => i !== index));
+  }, [items]);
+
+  const calculateTotal = useCallback(() => {
+    return items.reduce((sum, item) => sum + item.total, 0);
+  }, [items]);
 
   const filteredProducts = products.filter(p =>
     productSearch === "" ||
@@ -107,34 +124,21 @@ const SaleForm: FC<SaleFormProps> = ({ sale, onSubmit, onCancel }) => {
   const validate = useCallback((): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.customerId) {
+    if (!customerId) {
       newErrors.customerId = "Customer is required";
     }
 
-    if (!formData.productId) {
-      newErrors.productId = "Product is required";
-    } else {
-      const product = products.find(p => p.id === formData.productId);
-      if (product && product.type !== "sale" && product.type !== "both") {
-        newErrors.productId = "Product must be available for sale";
-      }
+    if (items.length === 0) {
+      newErrors.items = "At least one product is required";
     }
 
-    if (!formData.quantity || Number(formData.quantity) <= 0) {
-      newErrors.quantity = "Valid quantity is required";
-    }
-
-    if (!formData.unitPrice || Number(formData.unitPrice) <= 0) {
-      newErrors.unitPrice = "Valid unit price is required";
-    }
-
-    if (!formData.paymentMethod) {
+    if (!paymentMethod) {
       newErrors.paymentMethod = "Payment method is required";
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [formData, products]);
+  }, [customerId, items, paymentMethod]);
 
   const handleSubmit = useCallback(
     async (e: FormEvent) => {
@@ -146,21 +150,20 @@ const SaleForm: FC<SaleFormProps> = ({ sale, onSubmit, onCancel }) => {
 
       setSubmitting(true);
       try {
-        // Transform form data to match API expectations
         const apiData: SaleFormData = {
-          customerId: formData.customerId,
-          items: [{
-            productId: formData.productId,
-            quantity: Number(formData.quantity),
-            unitPrice: formData.unitPrice,
+          customerId,
+          items: items.map(item => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
             discount: "0",
-          }],
+          })),
           discount: "0",
           tax: "0",
-          paymentStatus: "paid", // Assuming paid for simplicity
-          paymentMethod: formData.paymentMethod as any,
-          amountPaid: formData.totalPrice,
-          notes: formData.notes,
+          paymentStatus: paymentMethod === "borrow" ? "pending" : "paid",
+          paymentMethod: paymentMethod as any,
+          amountPaid: paymentMethod === "borrow" ? "0" : calculateTotal().toFixed(2),
+          notes,
         };
 
         await onSubmit(apiData);
@@ -170,22 +173,20 @@ const SaleForm: FC<SaleFormProps> = ({ sale, onSubmit, onCancel }) => {
         setSubmitting(false);
       }
     },
-    [formData, validate, onSubmit]
+    [customerId, items, paymentMethod, notes, validate, onSubmit, calculateTotal]
   );
 
   if (loadingData) {
-    return <div className="text-center py-8">Loading...</div>;
+    return <div className="text-center py-8 text-gray-600">Loading...</div>;
   }
-
-  const selectedProduct = products.find(p => p.id === formData.productId);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Select
           label="Customer *"
-          value={formData.customerId}
-          onChange={(e) => handleChange("customerId", e.target.value)}
+          value={customerId}
+          onChange={(e) => setCustomerId(e.target.value)}
           options={[
             { value: "", label: "Select a customer" },
             ...customers.map((customer) => ({
@@ -196,133 +197,126 @@ const SaleForm: FC<SaleFormProps> = ({ sale, onSubmit, onCancel }) => {
           error={errors.customerId}
         />
 
-        <div className="relative">
-          <label className="block text-sm font-semibold text-gray-800 mb-2">
-            Product * (Search)
-          </label>
-          <Input
-            type="text"
-            placeholder="Search product by name or SKU..."
-            value={productSearch}
-            onChange={(e) => {
-              setProductSearch(e.target.value);
-              setShowProductDropdown(true);
-            }}
-            onFocus={() => setShowProductDropdown(true)}
-            error={errors.productId}
-          />
-          {showProductDropdown && productSearch && (
-            <div className="absolute z-10 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto mt-1">
-              {filteredProducts.map((product) => (
-                <button
-                  key={product.id}
-                  type="button"
-                  className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-b last:border-b-0"
-                  onClick={() => handleProductSelect(product.id)}
-                >
-                  <div className="font-medium text-gray-900">{product.name}</div>
-                  <div className="flex justify-between items-center mt-1">
-                    {product.sku && (
-                      <div className="text-xs text-gray-500">SKU: {product.sku}</div>
-                    )}
-                    <div className="text-xs font-semibold text-blue-600">
-                      ${product.salePrice || "0.00"}
-                    </div>
-                  </div>
-                </button>
-              ))}
-              {filteredProducts.length === 0 && (
-                <div className="px-4 py-2 text-sm text-gray-500">No products found</div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <Select
-          label="Product * (Dropdown)"
-          value={formData.productId}
-          onChange={(e) => {
-            handleChange("productId", e.target.value);
-            const product = products.find(p => p.id === e.target.value);
-            if (product) {
-              setProductSearch(product.name);
-              handleChange("unitPrice", product.salePrice || "");
-            }
-          }}
-          options={[
-            { value: "", label: "Select a product" },
-            ...products.map((product) => ({
-              value: product.id,
-              label: product.name,
-            })),
-          ]}
-          error={errors.productId}
-        />
-
-        <Input
-          label="Quantity *"
-          type="number"
-          min={1}
-          value={formData.quantity}
-          onChange={(e) => handleChange("quantity", Number(e.target.value))}
-          error={errors.quantity}
-          placeholder="Enter quantity"
-        />
-
-        <Input
-          label="Unit Price *"
-          type="number"
-          step="0.01"
-          value={formData.unitPrice}
-          onChange={(e) => handleChange("unitPrice", e.target.value)}
-          error={errors.unitPrice}
-          placeholder="Auto-filled from product"
-        />
-
-        <div>
-          <label className="block text-sm font-semibold text-gray-800 mb-2">
-            Total Price (Calculated)
-          </label>
-          <div className="h-11 flex items-center px-4 bg-blue-50 rounded-lg border border-blue-300">
-            <span className="text-lg font-bold text-blue-900">
-              ${formData.totalPrice}
-            </span>
-          </div>
-        </div>
-
         <Select
           label="Payment Method *"
-          value={formData.paymentMethod}
-          onChange={(e) => handleChange("paymentMethod", e.target.value)}
+          value={paymentMethod}
+          onChange={(e) => setPaymentMethod(e.target.value)}
           options={[
             { value: "", label: "Select payment method" },
-            { value: "cash", label: "Cash" },
-            { value: "card", label: "Card" },
-            { value: "bank_transfer", label: "Bank Transfer" },
+            ...PAYMENT_METHODS.map((method) => ({
+              value: method.value,
+              label: method.label,
+            })),
           ]}
           error={errors.paymentMethod}
         />
       </div>
 
-      {selectedProduct && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <h4 className="text-sm font-semibold text-gray-900 mb-2">Selected Product Details</h4>
-          <div className="text-sm text-gray-700 space-y-1">
-            <p><span className="font-medium">Name:</span> {selectedProduct.name}</p>
-            {selectedProduct.sku && (
-              <p><span className="font-medium">SKU:</span> {selectedProduct.sku}</p>
-            )}
-            <p><span className="font-medium">Type:</span> <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{selectedProduct.type}</span></p>
-            <p><span className="font-medium">Stock:</span> {selectedProduct.currentStock} {selectedProduct.unit}</p>
-            <p><span className="font-medium">Sale Price:</span> ${selectedProduct.salePrice || "0.00"}</p>
+      {/* Product Selection */}
+      <div className="border-t pt-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Products</h3>
+
+        <Select
+          label="Add Product"
+          value=""
+          onChange={(e) => {
+            if (e.target.value) {
+              handleAddProduct(e.target.value);
+            }
+          }}
+          options={[
+            { value: "", label: "Select a product to add" },
+            ...products.map((product) => ({
+              value: product.id,
+              label: `${product.name} - ${formatCurrency(product.salePrice || 0)}/${product.unit}`,
+            })),
+          ]}
+        />
+
+        {errors.items && (
+          <p className="mt-2 text-sm font-medium text-red-600">{errors.items}</p>
+        )}
+
+        {/* Items List */}
+        {items.length > 0 && (
+          <div className="mt-4 space-y-3">
+            {items.map((item, index) => (
+              <div key={index} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Product
+                    </label>
+                    <p className="text-sm font-semibold text-gray-900">{item.productName}</p>
+                    <p className="text-xs text-gray-500">Unit: {item.unit}</p>
+                  </div>
+
+                  <div>
+                    <Input
+                      label={`Quantity (${item.unit})`}
+                      type="number"
+                      min={1}
+                      value={item.quantity}
+                      onChange={(e) => handleUpdateQuantity(index, Number(e.target.value))}
+                    />
+                  </div>
+
+                  <div>
+                    <Input
+                      label="Unit Price"
+                      type="number"
+                      step="0.01"
+                      value={item.unitPrice}
+                      onChange={(e) => handleUpdatePrice(index, e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Total
+                    </label>
+                    <div className="h-11 flex items-center justify-between px-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <span className="font-bold text-blue-900">
+                        {formatCurrency(item.total)}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="danger"
+                        size="sm"
+                        onClick={() => handleRemoveItem(index)}
+                      >
+                        ×
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
+        )}
+      </div>
+
+      {/* Grand Total */}
+      {items.length > 0 && (
+        <div className="bg-green-50 border-2 border-green-300 rounded-lg p-6">
+          <div className="flex justify-between items-center">
+            <span className="text-lg font-semibold text-gray-900">Grand Total:</span>
+            <span className="text-3xl font-bold text-green-900">
+              {formatCurrency(calculateTotal())}
+            </span>
+          </div>
+          {paymentMethod === "borrow" && (
+            <p className="mt-2 text-sm text-orange-700">
+              💳 This sale will be marked as credit (pending payment)
+            </p>
+          )}
         </div>
       )}
 
       <Textarea
         label="Notes"
-        value={formData.notes}
-        onChange={(e) => handleChange("notes", e.target.value)}
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
         placeholder="Additional notes about the sale"
         rows={3}
       />

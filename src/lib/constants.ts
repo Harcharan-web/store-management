@@ -12,6 +12,7 @@ export const PRODUCT_UNITS = [
   "gram",
   "liter",
   "meter",
+  "feet",
   "bag",
   "box",
   "bundle",
@@ -30,6 +31,7 @@ export const PAYMENT_METHODS = [
   { value: "upi", label: "UPI" },
   { value: "bank_transfer", label: "Bank Transfer" },
   { value: "cheque", label: "Cheque" },
+  { value: "borrow", label: "Borrow (Credit)" },
 ] as const;
 
 export const RENTAL_STATUSES = [

@@ -97,7 +97,18 @@ const SaleList: FC<SaleListProps> = ({
                   {sale.customer?.name || "-"}
                 </td>
                 <td className="py-3 px-4 text-gray-700">
-                  {sale.items.length} item{sale.items.length !== 1 ? "s" : ""}
+                  <div className="space-y-1">
+                    {sale.items.slice(0, 2).map((item, idx) => (
+                      <div key={idx} className="text-xs">
+                        {item.product?.name} ({item.quantity} {item.product?.unit})
+                      </div>
+                    ))}
+                    {sale.items.length > 2 && (
+                      <div className="text-xs text-blue-600 font-medium">
+                        +{sale.items.length - 2} more
+                      </div>
+                    )}
+                  </div>
                 </td>
                 <td className="py-3 px-4 font-semibold text-gray-900">
                   {formatCurrency(sale.total)}

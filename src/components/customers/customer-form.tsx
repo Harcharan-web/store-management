@@ -4,6 +4,7 @@ import { useState, useCallback, type FC, type FormEvent } from "react";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
 import Textarea from "@/components/ui/textarea";
+import LocationPicker from "@/components/ui/location-picker";
 import type { Customer, CustomerFormData } from "@/types";
 
 interface CustomerFormProps {
@@ -12,12 +13,18 @@ interface CustomerFormProps {
   onCancel: () => void;
 }
 
-const CustomerForm: FC<CustomerFormProps> = ({ customer, onSubmit, onCancel }) => {
+const CustomerForm: FC<CustomerFormProps> = ({
+  customer,
+  onSubmit,
+  onCancel,
+}) => {
   const [formData, setFormData] = useState<CustomerFormData>({
     name: customer?.name || "",
+    shortName: customer?.shortName || "",
     phone: customer?.phone || "",
-    email: customer?.email || "",
     address: customer?.address || "",
+    latitude: customer?.latitude || "",
+    longitude: customer?.longitude || "",
     notes: customer?.notes || "",
   });
 
@@ -34,6 +41,18 @@ const CustomerForm: FC<CustomerFormProps> = ({ customer, onSubmit, onCancel }) =
     [errors]
   );
 
+  const handleLocationChange = useCallback(
+    (data: { address: string; latitude: string; longitude: string }) => {
+      setFormData((prev) => ({
+        ...prev,
+        address: data.address,
+        latitude: data.latitude,
+        longitude: data.longitude,
+      }));
+    },
+    []
+  );
+
   const validate = useCallback((): boolean => {
     const newErrors: Record<string, string> = {};
 
@@ -43,10 +62,6 @@ const CustomerForm: FC<CustomerFormProps> = ({ customer, onSubmit, onCancel }) =
 
     if (!formData.phone.trim()) {
       newErrors.phone = "Phone number is required";
-    }
-
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = "Invalid email format";
     }
 
     setErrors(newErrors);
@@ -81,7 +96,14 @@ const CustomerForm: FC<CustomerFormProps> = ({ customer, onSubmit, onCancel }) =
           value={formData.name}
           onChange={(e) => handleChange("name", e.target.value)}
           error={errors.name}
-          placeholder="Enter customer name"
+          placeholder="Enter full customer name"
+        />
+
+        <Input
+          label="Short Name / Nickname"
+          value={formData.shortName}
+          onChange={(e) => handleChange("shortName", e.target.value)}
+          placeholder="Short name for quick reference"
         />
 
         <Input
@@ -89,25 +111,18 @@ const CustomerForm: FC<CustomerFormProps> = ({ customer, onSubmit, onCancel }) =
           value={formData.phone}
           onChange={(e) => handleChange("phone", e.target.value)}
           error={errors.phone}
-          placeholder="+1 (555) 123-4567"
-        />
-
-        <Input
-          label="Email"
-          type="email"
-          value={formData.email}
-          onChange={(e) => handleChange("email", e.target.value)}
-          error={errors.email}
-          placeholder="customer@example.com"
-        />
-
-        <Input
-          label="Address"
-          value={formData.address}
-          onChange={(e) => handleChange("address", e.target.value)}
-          placeholder="Customer address"
+          placeholder="+91 98765 43210"
         />
       </div>
+
+      <LocationPicker
+        label="Address & Location"
+        address={formData.address || ""}
+        latitude={formData.latitude}
+        longitude={formData.longitude}
+        onLocationChange={handleLocationChange}
+        error={errors.address}
+      />
 
       <Textarea
         label="Notes"
@@ -122,7 +137,11 @@ const CustomerForm: FC<CustomerFormProps> = ({ customer, onSubmit, onCancel }) =
           Cancel
         </Button>
         <Button type="submit" disabled={submitting}>
-          {submitting ? "Saving..." : customer ? "Update Customer" : "Create Customer"}
+          {submitting
+            ? "Saving..."
+            : customer
+            ? "Update Customer"
+            : "Create Customer"}
         </Button>
       </div>
     </form>

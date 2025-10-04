@@ -81,9 +81,11 @@ export type ProductFormData = {
 
 export type CustomerFormData = {
   name: string;
-  email?: string;
+  shortName?: string;
   phone: string;
   address?: string;
+  latitude?: string;
+  longitude?: string;
   city?: string;
   state?: string;
   pincode?: string;

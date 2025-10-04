@@ -6,15 +6,24 @@ import Input from "@/components/ui/input";
 import Select from "@/components/ui/select";
 import Textarea from "@/components/ui/textarea";
 import type { RentalWithDetails, Customer, Product } from "@/types";
-import type { RentalFormData } from "@/hooks/use-rentals";
 import { useCustomers } from "@/hooks/use-customers";
 import { useProducts } from "@/hooks/use-products";
 import { formatCurrency } from "@/lib/utils";
 
 interface RentalFormProps {
   rental: RentalWithDetails | null;
-  onSubmit: (data: RentalFormData) => Promise<void>;
+  onSubmit: (data: any) => Promise<void>;
   onCancel: () => void;
+}
+
+interface RentalItem {
+  productId: string;
+  productName: string;
+  unit: string;
+  quantity: number;
+  rateType: "daily" | "weekly" | "monthly";
+  rateAmount: string;
+  currentStock: number;
 }
 
 const RentalForm: FC<RentalFormProps> = ({ rental, onSubmit, onCancel }) => {
@@ -23,24 +32,17 @@ const RentalForm: FC<RentalFormProps> = ({ rental, onSubmit, onCancel }) => {
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [productSearch, setProductSearch] = useState("");
 
-  const [formData, setFormData] = useState<RentalFormData>({
-    customerId: rental?.customerId || "",
-    productId: rental?.items[0]?.productId || "",
-    quantity: rental?.items[0]?.quantity || 1,
-    startDate: rental?.startDate || "",
-    expectedReturnDate: rental?.expectedReturnDate || "",
-    rateType: (rental?.items[0]?.rateType as "daily" | "weekly" | "monthly") || "daily",
-    rateAmount: rental?.items[0]?.rateAmount || "",
-    securityDeposit: rental?.securityDeposit || "",
-    notes: rental?.notes || "",
-  });
+  const [customerId, setCustomerId] = useState(rental?.customerId || "");
+  const [items, setItems] = useState<RentalItem[]>([]);
+  const [startDate, setStartDate] = useState(rental?.startDate || "");
+  const [expectedReturnDate, setExpectedReturnDate] = useState(rental?.expectedReturnDate || "");
+  const [securityDeposit, setSecurityDeposit] = useState(rental?.securityDeposit || "");
+  const [notes, setNotes] = useState(rental?.notes || "");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
-  const [totalAmount, setTotalAmount] = useState<number>(0);
   const [rentalPeriod, setRentalPeriod] = useState({ days: 0, weeks: 0, months: 0 });
 
   // Load customers and products on mount
@@ -61,33 +63,27 @@ const RentalForm: FC<RentalFormProps> = ({ rental, onSubmit, onCancel }) => {
     loadData();
   }, [fetchCustomers, fetchProducts]);
 
-  // Update selected product when productId changes
+  // Initialize items from existing rental
   useEffect(() => {
-    if (formData.productId) {
-      const product = products.find(p => p.id === formData.productId);
-      setSelectedProduct(product || null);
-
-      // Set initial rate if product is selected
-      if (product && !formData.rateAmount) {
-        const rateAmount =
-          formData.rateType === "daily" ? product.rentPricePerDay :
-          formData.rateType === "weekly" ? product.rentPricePerWeek :
-          product.rentPricePerMonth;
-
-        if (rateAmount) {
-          setFormData(prev => ({ ...prev, rateAmount: rateAmount.toString() }));
-        }
-      }
-    } else {
-      setSelectedProduct(null);
+    if (rental && rental.items && rental.items.length > 0 && items.length === 0) {
+      const initialItems = rental.items.map(item => ({
+        productId: item.productId,
+        productName: item.product.name,
+        unit: item.product.unit || "piece",
+        quantity: item.quantity,
+        rateType: (item.rateType || "daily") as "daily" | "weekly" | "monthly",
+        rateAmount: item.rateAmount || "0",
+        currentStock: item.product.currentStock || 0,
+      }));
+      setItems(initialItems);
     }
-  }, [formData.productId, products, formData.rateType]);
+  }, [rental, items.length]);
 
-  // Calculate rental period and total amount
+  // Calculate rental period
   useEffect(() => {
-    if (formData.startDate && formData.expectedReturnDate) {
-      const start = new Date(formData.startDate);
-      const end = new Date(formData.expectedReturnDate);
+    if (startDate && expectedReturnDate) {
+      const start = new Date(startDate);
+      const end = new Date(expectedReturnDate);
       const diffTime = Math.abs(end.getTime() - start.getTime());
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
@@ -96,97 +92,120 @@ const RentalForm: FC<RentalFormProps> = ({ rental, onSubmit, onCancel }) => {
       const months = Math.ceil(diffDays / 30);
 
       setRentalPeriod({ days, weeks, months });
-
-      // Calculate total amount
-      if (formData.rateAmount && formData.quantity) {
-        let periodCount = 0;
-        if (formData.rateType === "daily") periodCount = days;
-        else if (formData.rateType === "weekly") periodCount = weeks;
-        else if (formData.rateType === "monthly") periodCount = months;
-
-        const rate = parseFloat(formData.rateAmount) || 0;
-        const total = rate * periodCount * formData.quantity;
-        setTotalAmount(total);
-      }
     }
-  }, [formData.startDate, formData.expectedReturnDate, formData.rateAmount, formData.rateType, formData.quantity]);
+  }, [startDate, expectedReturnDate]);
 
-  const handleChange = useCallback(
-    (field: keyof RentalFormData, value: string | number) => {
-      setFormData((prev) => ({ ...prev, [field]: value }));
-      if (errors[field]) {
-        setErrors((prev) => ({ ...prev, [field]: "" }));
-      }
-    },
-    [errors]
-  );
+  const handleAddProduct = useCallback((productId: string) => {
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
 
-  const handleRateTypeChange = useCallback(
-    (value: string) => {
-      const rateType = value as "daily" | "weekly" | "monthly";
-      setFormData((prev) => ({ ...prev, rateType }));
+    // Check if product already added
+    if (items.some(item => item.productId === productId)) {
+      alert("This product is already added");
+      return;
+    }
 
-      // Update rate amount based on selected product
-      if (selectedProduct) {
-        const rateAmount =
-          rateType === "daily" ? selectedProduct.rentPricePerDay :
-          rateType === "weekly" ? selectedProduct.rentPricePerWeek :
-          selectedProduct.rentPricePerMonth;
+    const newItem: RentalItem = {
+      productId: product.id,
+      productName: product.name,
+      unit: product.unit || "piece",
+      quantity: 1,
+      rateType: "daily",
+      rateAmount: product.rentPricePerDay || "0",
+      currentStock: product.currentStock || 0,
+    };
+    setItems([...items, newItem]);
+    setProductSearch("");
+  }, [products, items]);
 
-        if (rateAmount) {
-          setFormData(prev => ({ ...prev, rateAmount: rateAmount.toString() }));
+  const handleRemoveItem = useCallback((index: number) => {
+    setItems(items.filter((_, i) => i !== index));
+  }, [items]);
+
+  const handleItemChange = useCallback((index: number, field: keyof RentalItem, value: string | number) => {
+    setItems(items.map((item, i) => {
+      if (i !== index) return item;
+
+      // If changing rate type, update the rate amount from product
+      if (field === "rateType") {
+        const product = products.find(p => p.id === item.productId);
+        if (product) {
+          const newRateType = value as "daily" | "weekly" | "monthly";
+          const rateAmount =
+            newRateType === "daily" ? product.rentPricePerDay :
+            newRateType === "weekly" ? product.rentPricePerWeek :
+            product.rentPricePerMonth;
+
+          return {
+            ...item,
+            rateType: newRateType,
+            rateAmount: rateAmount || "0",
+          };
         }
       }
 
-      if (errors.rateType) {
-        setErrors((prev) => ({ ...prev, rateType: "" }));
-      }
-    },
-    [selectedProduct, errors]
-  );
+      return { ...item, [field]: value };
+    }));
+  }, [items, products]);
+
+  const calculateItemTotal = useCallback((item: RentalItem): number => {
+    if (!startDate || !expectedReturnDate) return 0;
+
+    let periodCount = 0;
+    if (item.rateType === "daily") periodCount = rentalPeriod.days;
+    else if (item.rateType === "weekly") periodCount = rentalPeriod.weeks;
+    else if (item.rateType === "monthly") periodCount = rentalPeriod.months;
+
+    const rate = parseFloat(item.rateAmount) || 0;
+    return rate * periodCount * item.quantity;
+  }, [startDate, expectedReturnDate, rentalPeriod]);
+
+  const calculateGrandTotal = useCallback((): number => {
+    return items.reduce((sum, item) => sum + calculateItemTotal(item), 0);
+  }, [items, calculateItemTotal]);
 
   const validate = useCallback((): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.customerId) {
+    if (!customerId) {
       newErrors.customerId = "Customer is required";
     }
 
-    if (!formData.productId) {
-      newErrors.productId = "Product is required";
+    if (items.length === 0) {
+      newErrors.items = "At least one product is required";
     }
 
-    if (!formData.quantity || formData.quantity < 1) {
-      newErrors.quantity = "Quantity must be at least 1";
-    }
+    items.forEach((item, index) => {
+      if (!item.quantity || item.quantity < 1) {
+        newErrors[`quantity_${index}`] = "Quantity must be at least 1";
+      }
+      if (item.quantity > item.currentStock) {
+        newErrors[`quantity_${index}`] = `Only ${item.currentStock} available in stock`;
+      }
+      if (!item.rateAmount || parseFloat(item.rateAmount) <= 0) {
+        newErrors[`rateAmount_${index}`] = "Rate amount must be greater than 0";
+      }
+    });
 
-    if (!formData.startDate) {
+    if (!startDate) {
       newErrors.startDate = "Start date is required";
     }
 
-    if (!formData.expectedReturnDate) {
+    if (!expectedReturnDate) {
       newErrors.expectedReturnDate = "Return date is required";
     }
 
-    if (formData.startDate && formData.expectedReturnDate) {
-      const start = new Date(formData.startDate);
-      const end = new Date(formData.expectedReturnDate);
+    if (startDate && expectedReturnDate) {
+      const start = new Date(startDate);
+      const end = new Date(expectedReturnDate);
       if (end <= start) {
         newErrors.expectedReturnDate = "Return date must be after start date";
       }
     }
 
-    if (!formData.rateAmount || parseFloat(formData.rateAmount) <= 0) {
-      newErrors.rateAmount = "Rate amount is required and must be greater than 0";
-    }
-
-    if (selectedProduct && (selectedProduct.type !== "rent" && selectedProduct.type !== "both")) {
-      newErrors.productId = "Selected product is not available for rental";
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [formData, selectedProduct]);
+  }, [customerId, items, startDate, expectedReturnDate]);
 
   const handleSubmit = useCallback(
     async (e: FormEvent) => {
@@ -198,6 +217,19 @@ const RentalForm: FC<RentalFormProps> = ({ rental, onSubmit, onCancel }) => {
 
       setSubmitting(true);
       try {
+        const formData = {
+          customerId,
+          items: items.map(item => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            rateType: item.rateType,
+            rateAmount: item.rateAmount,
+          })),
+          startDate,
+          expectedReturnDate,
+          securityDeposit,
+          notes,
+        };
         await onSubmit(formData);
       } catch (err) {
         console.error("Form submission error:", err);
@@ -205,38 +237,44 @@ const RentalForm: FC<RentalFormProps> = ({ rental, onSubmit, onCancel }) => {
         setSubmitting(false);
       }
     },
-    [formData, validate, onSubmit]
+    [customerId, items, startDate, expectedReturnDate, securityDeposit, notes, validate, onSubmit]
   );
 
   // Filter products based on search
   const filteredProducts = products.filter(p =>
-    p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-    (p.sku && p.sku.toLowerCase().includes(productSearch.toLowerCase()))
+    !items.some(item => item.productId === p.id) && (
+      p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+      (p.sku && p.sku.toLowerCase().includes(productSearch.toLowerCase()))
+    )
   );
 
-  // Get available rate options for selected product
-  const availableRates = selectedProduct ? [
-    ...(selectedProduct.rentPricePerDay ? [{
-      value: "daily",
-      label: `Daily - ${formatCurrency(selectedProduct.rentPricePerDay)}`,
-    }] : []),
-    ...(selectedProduct.rentPricePerWeek ? [{
-      value: "weekly",
-      label: `Weekly - ${formatCurrency(selectedProduct.rentPricePerWeek)}`,
-    }] : []),
-    ...(selectedProduct.rentPricePerMonth ? [{
-      value: "monthly",
-      label: `Monthly - ${formatCurrency(selectedProduct.rentPricePerMonth)}`,
-    }] : []),
-  ] : [];
+  const getAvailableRates = (item: RentalItem) => {
+    const product = products.find(p => p.id === item.productId);
+    if (!product) return [];
+
+    return [
+      ...(product.rentPricePerDay ? [{
+        value: "daily",
+        label: `Daily - ${formatCurrency(product.rentPricePerDay)}`,
+      }] : []),
+      ...(product.rentPricePerWeek ? [{
+        value: "weekly",
+        label: `Weekly - ${formatCurrency(product.rentPricePerWeek)}`,
+      }] : []),
+      ...(product.rentPricePerMonth ? [{
+        value: "monthly",
+        label: `Monthly - ${formatCurrency(product.rentPricePerMonth)}`,
+      }] : []),
+    ];
+  };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Select
           label="Customer *"
-          value={formData.customerId}
-          onChange={(e) => handleChange("customerId", e.target.value)}
+          value={customerId}
+          onChange={(e) => setCustomerId(e.target.value)}
           options={[
             { value: "", label: "Select a customer" },
             ...customers.map((customer) => ({
@@ -247,83 +285,28 @@ const RentalForm: FC<RentalFormProps> = ({ rental, onSubmit, onCancel }) => {
           error={errors.customerId}
         />
 
-        <div>
-          <label className="block text-sm font-semibold text-gray-800 mb-2">
-            Product * (search to find)
-          </label>
-          <Input
-            type="search"
-            placeholder="Search products..."
-            value={productSearch}
-            onChange={(e) => setProductSearch(e.target.value)}
-            className="mb-2"
-          />
-          <Select
-            value={formData.productId}
-            onChange={(e) => handleChange("productId", e.target.value)}
-            options={[
-              { value: "", label: "Select a product" },
-              ...filteredProducts.map((product) => ({
-                value: product.id,
-                label: `${product.name}${product.sku ? ` (${product.sku})` : ""} - Stock: ${product.currentStock}`,
-              })),
-            ]}
-            error={errors.productId}
-          />
-        </div>
-
-        <Input
-          label="Quantity *"
-          type="number"
-          min={1}
-          value={formData.quantity}
-          onChange={(e) => handleChange("quantity", parseInt(e.target.value) || 1)}
-          error={errors.quantity}
-          placeholder="1"
-        />
-
         <Input
           label="Start Date *"
           type="date"
-          value={formData.startDate}
-          onChange={(e) => handleChange("startDate", e.target.value)}
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
           error={errors.startDate}
         />
 
         <Input
           label="Expected Return Date *"
           type="date"
-          value={formData.expectedReturnDate}
-          onChange={(e) => handleChange("expectedReturnDate", e.target.value)}
+          value={expectedReturnDate}
+          onChange={(e) => setExpectedReturnDate(e.target.value)}
           error={errors.expectedReturnDate}
-        />
-
-        {selectedProduct && availableRates.length > 0 && (
-          <Select
-            label="Rate Type *"
-            value={formData.rateType}
-            onChange={(e) => handleRateTypeChange(e.target.value)}
-            options={availableRates}
-            error={errors.rateType}
-          />
-        )}
-
-        <Input
-          label="Rate Amount *"
-          type="number"
-          step="0.01"
-          value={formData.rateAmount}
-          onChange={(e) => handleChange("rateAmount", e.target.value)}
-          error={errors.rateAmount}
-          placeholder="0.00"
         />
 
         <Input
           label="Security Deposit"
           type="number"
           step="0.01"
-          value={formData.securityDeposit}
-          onChange={(e) => handleChange("securityDeposit", e.target.value)}
+          value={securityDeposit}
+          onChange={(e) => setSecurityDeposit(e.target.value)}
           placeholder="0.00"
         />
       </div>
@@ -331,59 +314,187 @@ const RentalForm: FC<RentalFormProps> = ({ rental, onSubmit, onCancel }) => {
       {/* Rental Period Summary */}
       {rentalPeriod.days > 0 && (
         <div className="border-t pt-6">
-          <h3 className="text-lg font-semibold mb-4 text-gray-900">Rental Period Summary</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-700">Total Days</p>
-              <p className="text-2xl font-bold text-gray-900">{rentalPeriod.days}</p>
+          <h3 className="text-lg font-semibold mb-4 text-gray-900">Rental Period</h3>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <p className="text-xs text-gray-700">Days</p>
+              <p className="text-xl font-bold text-gray-900">{rentalPeriod.days}</p>
             </div>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-700">Total Weeks</p>
-              <p className="text-2xl font-bold text-gray-900">{rentalPeriod.weeks}</p>
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <p className="text-xs text-gray-700">Weeks</p>
+              <p className="text-xl font-bold text-gray-900">{rentalPeriod.weeks}</p>
             </div>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-700">Total Months</p>
-              <p className="text-2xl font-bold text-gray-900">{rentalPeriod.months}</p>
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <p className="text-xs text-gray-700">Months</p>
+              <p className="text-xl font-bold text-gray-900">{rentalPeriod.months}</p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Total Amount */}
-      {totalAmount > 0 && (
+      {/* Products Section */}
+      <div className="border-t pt-6">
+        <h3 className="text-lg font-semibold mb-4 text-gray-900">Products *</h3>
+
+        {/* Add Product */}
+        <div className="mb-4">
+          <label className="block text-sm font-semibold text-gray-800 mb-2">
+            Add Product
+          </label>
+          <div className="flex gap-2">
+            <Input
+              type="search"
+              placeholder="Search products..."
+              value={productSearch}
+              onChange={(e) => setProductSearch(e.target.value)}
+              className="flex-1"
+            />
+            <Select
+              value=""
+              onChange={(e) => e.target.value && handleAddProduct(e.target.value)}
+              options={[
+                { value: "", label: "Select product" },
+                ...filteredProducts.map((product) => ({
+                  value: product.id,
+                  label: `${product.name} - Stock: ${product.currentStock} ${product.unit}`,
+                })),
+              ]}
+              className="flex-1"
+            />
+          </div>
+          {errors.items && <p className="text-red-600 text-sm mt-1">{errors.items}</p>}
+        </div>
+
+        {/* Items List */}
+        {items.length > 0 && (
+          <div className="space-y-4">
+            {items.map((item, index) => {
+              const availableRates = getAvailableRates(item);
+              const itemTotal = calculateItemTotal(item);
+
+              return (
+                <div key={index} className="border rounded-lg p-4 bg-gray-50">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h4 className="font-semibold text-gray-900">{item.productName}</h4>
+                      <p className="text-sm text-gray-600">Stock: {item.currentStock} {item.unit}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="danger"
+                      size="sm"
+                      onClick={() => handleRemoveItem(index)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Quantity *
+                      </label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={item.currentStock}
+                        value={item.quantity}
+                        onChange={(e) => handleItemChange(index, "quantity", parseInt(e.target.value) || "")}
+                        error={errors[`quantity_${index}`]}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Rate Type *
+                      </label>
+                      <Select
+                        value={item.rateType}
+                        onChange={(e) => handleItemChange(index, "rateType", e.target.value)}
+                        options={availableRates}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Rate Amount *
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={item.rateAmount}
+                        onChange={(e) => handleItemChange(index, "rateAmount", e.target.value)}
+                        error={errors[`rateAmount_${index}`]}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Total
+                      </label>
+                      <div className="text-lg font-bold text-blue-600 mt-2">
+                        {formatCurrency(itemTotal)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {rentalPeriod.days > 0 && (
+                    <p className="text-xs text-gray-600 mt-2">
+                      {item.quantity} × {formatCurrency(parseFloat(item.rateAmount) || 0)} × {
+                        item.rateType === "daily" ? `${rentalPeriod.days} days` :
+                        item.rateType === "weekly" ? `${rentalPeriod.weeks} weeks` :
+                        `${rentalPeriod.months} months`
+                      }
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Grand Total */}
+      {items.length > 0 && rentalPeriod.days > 0 && (
         <div className="border-t pt-6">
           <div className="bg-blue-50 p-6 rounded-lg">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center mb-4">
               <div>
-                <p className="text-sm text-gray-700">Total Rental Amount</p>
+                <p className="text-sm text-gray-700">Estimated Rental Charges</p>
                 <p className="text-xs text-gray-600 mt-1">
-                  {formData.quantity} × {formatCurrency(parseFloat(formData.rateAmount) || 0)} × {
-                    formData.rateType === "daily" ? `${rentalPeriod.days} days` :
-                    formData.rateType === "weekly" ? `${rentalPeriod.weeks} weeks` :
-                    `${rentalPeriod.months} months`
-                  }
+                  {items.length} product{items.length > 1 ? "s" : ""} × {rentalPeriod.days} days
                 </p>
               </div>
-              <p className="text-3xl font-bold text-blue-600">{formatCurrency(totalAmount)}</p>
+              <p className="text-3xl font-bold text-blue-600">{formatCurrency(calculateGrandTotal())}</p>
             </div>
-            {formData.securityDeposit && parseFloat(formData.securityDeposit) > 0 && (
-              <div className="mt-4 pt-4 border-t border-blue-200">
+
+            {securityDeposit && parseFloat(securityDeposit) > 0 && (
+              <div className="pt-4 border-t border-blue-200">
                 <div className="flex justify-between items-center">
-                  <p className="text-sm text-gray-700">Security Deposit</p>
-                  <p className="text-xl font-semibold text-gray-900">
-                    {formatCurrency(parseFloat(formData.securityDeposit))}
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Security Deposit (Held)</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Will be adjusted at return time
+                    </p>
+                  </div>
+                  <p className="text-xl font-semibold text-green-600">
+                    {formatCurrency(parseFloat(securityDeposit))}
                   </p>
                 </div>
               </div>
             )}
+
+            <div className="mt-4 pt-4 border-t border-blue-200 bg-blue-100 -mx-6 -mb-6 px-6 py-4 rounded-b-lg">
+              <p className="text-xs text-gray-600 mb-2">Note: Actual charges will be calculated based on actual return date</p>
+            </div>
           </div>
         </div>
       )}
 
       <Textarea
         label="Notes"
-        value={formData.notes}
-        onChange={(e) => handleChange("notes", e.target.value)}
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
         placeholder="Additional notes about the rental"
         rows={3}
       />

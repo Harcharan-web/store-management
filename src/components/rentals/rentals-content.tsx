@@ -5,15 +5,19 @@ import { useRentals } from "@/hooks/use-rentals";
 import type { RentalFormData } from "@/hooks/use-rentals";
 import RentalList from "./rental-list";
 import RentalForm from "./rental-form";
+import ReturnRentalModal from "./return-rental-modal";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
 import Select from "@/components/ui/select";
+import ConfirmDialog from "@/components/ui/confirm-dialog";
+import AlertDialog from "@/components/ui/alert-dialog";
 import { MemoizedCardContent } from "@/components/ui/card";
 import type { RentalWithDetails, PaginatedResponse } from "@/types";
 
 export default function RentalsContent() {
   const [showForm, setShowForm] = useState(false);
   const [editingRental, setEditingRental] = useState<RentalWithDetails | null>(null);
+  const [returningRental, setReturningRental] = useState<RentalWithDetails | null>(null);
   const [rentals, setRentals] = useState<PaginatedResponse<RentalWithDetails> | null>(
     null
   );
@@ -21,6 +25,22 @@ export default function RentalsContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; id: string | null }>({
+    show: false,
+    id: null,
+  });
+  const [alert, setAlert] = useState<{
+    show: boolean;
+    type: "success" | "error";
+    title: string;
+    message: string;
+  }>({
+    show: false,
+    type: "success",
+    title: "",
+    message: "",
+  });
 
   const { loading, error, fetchRentals, createRental, updateRental, returnRental, deleteRental } =
     useRentals();
@@ -85,31 +105,83 @@ export default function RentalsContent() {
   }, []);
 
   const handleReturn = useCallback(
-    async (id: string) => {
-      if (!confirm("Are you sure you want to mark this rental as returned?")) return;
+    (rental: RentalWithDetails) => {
+      setReturningRental(rental);
+    },
+    []
+  );
+
+  const handleReturnSubmit = useCallback(
+    async (returnData: any) => {
+      if (!returningRental) return;
 
       try {
-        await returnRental(id);
-        loadRentals(currentPage, searchQuery, statusFilter);
+        const response = await fetch(`/api/rentals/${returningRental.id}/return`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(returnData),
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          setAlert({
+            show: true,
+            type: "success",
+            title: "Return Processed",
+            message: data.message || "Rental return processed successfully",
+          });
+          setReturningRental(null);
+          loadRentals(currentPage, searchQuery, statusFilter);
+        } else {
+          throw new Error(data.error);
+        }
       } catch (err) {
         console.error("Failed to return rental:", err);
+        setAlert({
+          show: true,
+          type: "error",
+          title: "Return Failed",
+          message: err instanceof Error ? err.message : "Failed to process return",
+        });
       }
     },
-    [returnRental, loadRentals, currentPage, searchQuery, statusFilter]
+    [returningRental, loadRentals, currentPage, searchQuery, statusFilter]
   );
 
   const handleDelete = useCallback(
-    async (id: string) => {
-      if (!confirm("Are you sure you want to delete this rental?")) return;
+    (id: string) => {
+      setDeleteConfirm({ show: true, id });
+    },
+    []
+  );
+
+  const confirmDelete = useCallback(
+    async () => {
+      if (!deleteConfirm.id) return;
 
       try {
-        await deleteRental(id);
+        await deleteRental(deleteConfirm.id);
+        setAlert({
+          show: true,
+          type: "success",
+          title: "Deleted",
+          message: "Rental deleted successfully",
+        });
         loadRentals(currentPage, searchQuery, statusFilter);
       } catch (err) {
         console.error("Failed to delete rental:", err);
+        setAlert({
+          show: true,
+          type: "error",
+          title: "Delete Failed",
+          message: "Failed to delete rental",
+        });
+      } finally {
+        setDeleteConfirm({ show: false, id: null });
       }
     },
-    [deleteRental, loadRentals, currentPage, searchQuery, statusFilter]
+    [deleteConfirm, deleteRental, loadRentals, currentPage, searchQuery, statusFilter]
   );
 
   const handleSubmit = useCallback(
@@ -154,6 +226,7 @@ export default function RentalsContent() {
                 options={[
                   { value: "", label: "All Status" },
                   { value: "active", label: "Active" },
+                  { value: "partial_return", label: "Partial Return" },
                   { value: "returned", label: "Returned" },
                   { value: "overdue", label: "Overdue" },
                   { value: "cancelled", label: "Cancelled" },
@@ -186,6 +259,36 @@ export default function RentalsContent() {
           onCancel={handleCancel}
         />
       )}
+
+      {/* Return Modal */}
+      {returningRental && (
+        <ReturnRentalModal
+          rental={returningRental}
+          onReturn={handleReturnSubmit}
+          onCancel={() => setReturningRental(null)}
+        />
+      )}
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.show}
+        onClose={() => setDeleteConfirm({ show: false, id: null })}
+        onConfirm={confirmDelete}
+        title="Delete Rental"
+        message="Are you sure you want to delete this rental? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
+
+      {/* Alert Dialog */}
+      <AlertDialog
+        isOpen={alert.show}
+        onClose={() => setAlert({ ...alert, show: false })}
+        title={alert.title}
+        message={alert.message}
+        type={alert.type}
+      />
     </MemoizedCardContent>
   );
 }

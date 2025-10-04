@@ -8,6 +8,20 @@
       "when": 1759394970893,
       "tag": "0000_lean_caretaker",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1759505314388,
+      "tag": "0001_skinny_freak",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1759507927782,
+      "tag": "0002_little_starbolt",
+      "breakpoints": true
     }
   ]
 }

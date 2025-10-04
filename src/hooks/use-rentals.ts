@@ -10,12 +10,14 @@ import type {
 
 export interface RentalFormData {
   customerId: string;
-  productId: string;
-  quantity: number;
+  items: {
+    productId: string;
+    quantity: number;
+    rateType: "daily" | "weekly" | "monthly";
+    rateAmount: string;
+  }[];
   startDate: string;
   expectedReturnDate: string;
-  rateType: "daily" | "weekly" | "monthly";
-  rateAmount: string;
   securityDeposit?: string;
   notes?: string;
 }

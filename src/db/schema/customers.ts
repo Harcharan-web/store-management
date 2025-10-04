@@ -12,9 +12,11 @@ export const customers = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     name: varchar("name", { length: 255 }).notNull(),
-    email: varchar("email", { length: 255 }),
+    shortName: varchar("short_name", { length: 100 }),
     phone: varchar("phone", { length: 20 }).notNull(),
     address: text("address"),
+    latitude: varchar("latitude", { length: 50 }),
+    longitude: varchar("longitude", { length: 50 }),
     city: varchar("city", { length: 100 }),
     state: varchar("state", { length: 100 }),
     pincode: varchar("pincode", { length: 10 }),
@@ -25,7 +27,6 @@ export const customers = pgTable(
   (table) => [
     index("customers_name_idx").on(table.name),
     index("customers_phone_idx").on(table.phone),
-    index("customers_email_idx").on(table.email),
     index("customers_city_idx").on(table.city),
     index("customers_created_at_idx").on(table.createdAt),
   ]

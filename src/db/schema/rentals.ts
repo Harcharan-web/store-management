@@ -17,6 +17,7 @@ import { users } from "./users";
 
 export const rentalStatusEnum = pgEnum("rental_status", [
   "active",
+  "partial_return",
   "returned",
   "overdue",
   "cancelled",
@@ -37,8 +38,14 @@ export const rentals = pgTable(
     startDate: date("start_date").notNull(),
     expectedReturnDate: date("expected_return_date").notNull(),
     actualReturnDate: date("actual_return_date"),
+    nextReturnDate: date("next_return_date"),
 
     status: rentalStatusEnum("status").notNull().default("active"),
+
+    // Return payment tracking
+    returnPaymentMethod: varchar("return_payment_method", { length: 50 }),
+    returnPaymentAmount: decimal("return_payment_amount", { precision: 10, scale: 2 }),
+    returnNotes: text("return_notes"),
 
     // Totals
     subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
@@ -90,6 +97,9 @@ export const rentalItems = pgTable(
       .references(() => products.id, { onDelete: "restrict" }),
 
     quantity: integer("quantity").notNull(),
+    quantityReturned: integer("quantity_returned").notNull().default(0),
+    returnDate: date("return_date"),
+
     dailyRate: decimal("daily_rate", { precision: 10, scale: 2 }),
     weeklyRate: decimal("weekly_rate", { precision: 10, scale: 2 }),
     monthlyRate: decimal("monthly_rate", { precision: 10, scale: 2 }),

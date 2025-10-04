@@ -3,9 +3,13 @@ import { db } from "@/db";
 import { rentals, rentalItems, customers, products, users } from "@/db/schema";
 import { auth } from "@/auth";
 import { desc, ilike, or, count, eq, and } from "drizzle-orm";
-import type { ApiResponse, PaginatedResponse, RentalWithDetails } from "@/types";
+import type {
+  ApiResponse,
+  PaginatedResponse,
+  RentalWithDetails,
+} from "@/types";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,14 +29,16 @@ export async function GET(request: NextRequest) {
 
     const offset = (page - 1) * limit;
 
-    // Build where conditions
+    // Build where conditions for search
     const whereConditions = [];
     if (search) {
+      // Search in rental number, customer name, customer phone, and product names
       whereConditions.push(
         or(
           ilike(rentals.rentalNumber, `%${search}%`),
           ilike(customers.name, `%${search}%`),
-          ilike(customers.phone, `%${search}%`)
+          ilike(customers.phone, `%${search}%`),
+          ilike(products.name, `%${search}%`)
         )
       );
     }
@@ -117,20 +123,39 @@ export async function POST(request: NextRequest) {
     // Generate rental number
     const rentalNumber = `RNT-${Date.now()}`;
 
-    // Calculate dates and totals
+    // Calculate dates
     const startDate = new Date(body.startDate);
     const expectedReturnDate = new Date(body.expectedReturnDate);
-    const diffTime = Math.abs(expectedReturnDate.getTime() - startDate.getTime());
+    const diffTime = Math.abs(
+      expectedReturnDate.getTime() - startDate.getTime()
+    );
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const diffWeeks = Math.ceil(diffDays / 7);
+    const diffMonths = Math.ceil(diffDays / 30);
 
-    let periodCount = 0;
-    if (body.rateType === "daily") periodCount = diffDays;
-    else if (body.rateType === "weekly") periodCount = Math.ceil(diffDays / 7);
-    else if (body.rateType === "monthly") periodCount = Math.ceil(diffDays / 30);
+    // Calculate totals for all items
+    let subtotal = 0;
+    const itemsToInsert = body.items.map((item: any) => {
+      let periodCount = 0;
+      if (item.rateType === "daily") periodCount = diffDays;
+      else if (item.rateType === "weekly") periodCount = diffWeeks;
+      else if (item.rateType === "monthly") periodCount = diffMonths;
 
-    const rateAmount = parseFloat(body.rateAmount) || 0;
-    const quantity = parseInt(body.quantity) || 1;
-    const subtotal = rateAmount * periodCount * quantity;
+      const rateAmount = parseFloat(item.rateAmount) || 0;
+      const quantity = parseInt(item.quantity) || 1;
+      const itemTotal = rateAmount * periodCount * quantity;
+      subtotal += itemTotal;
+
+      return {
+        productId: item.productId,
+        quantity,
+        rateType: item.rateType,
+        rateAmount: rateAmount.toFixed(2),
+        totalDays: diffDays,
+        total: itemTotal.toFixed(2),
+      };
+    });
+
     const securityDeposit = parseFloat(body.securityDeposit) || 0;
     const totalCharges = subtotal;
 
@@ -152,16 +177,13 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
-    // Create rental item
-    await db.insert(rentalItems).values({
-      rentalId: rental.id,
-      productId: body.productId,
-      quantity,
-      rateType: body.rateType,
-      rateAmount: rateAmount.toFixed(2),
-      totalDays: diffDays,
-      total: subtotal.toFixed(2),
-    });
+    // Create rental items
+    await db.insert(rentalItems).values(
+      itemsToInsert.map((item: any) => ({
+        rentalId: rental.id,
+        ...item,
+      }))
+    );
 
     return NextResponse.json<ApiResponse>(
       { success: true, data: rental, message: "Rental created successfully" },

@@ -65,6 +65,9 @@ const ProductList: FC<ProductListProps> = ({
                 Sale Price
               </th>
               <th className="text-left py-3 px-4 font-semibold text-gray-900">
+                Rent Price
+              </th>
+              <th className="text-left py-3 px-4 font-semibold text-gray-900">
                 Status
               </th>
               <th className="text-right py-3 px-4 font-semibold text-gray-900">
@@ -92,6 +95,11 @@ const ProductList: FC<ProductListProps> = ({
                 </td>
                 <td className="py-3 px-4 font-semibold text-gray-900">
                   {product.salePrice ? formatCurrency(product.salePrice) : "-"}
+                </td>
+                <td className="py-3 px-4 font-semibold text-gray-900">
+                  {product.rentPricePerDay
+                    ? `${formatCurrency(product.rentPricePerDay)}/day`
+                    : "-"}
                 </td>
                 <td className="py-3 px-4">
                   {product.isActive ? (

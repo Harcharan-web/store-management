@@ -16,7 +16,7 @@ interface RentalListProps {
   };
   loading: boolean;
   onEdit: (rental: RentalWithDetails) => void;
-  onReturn: (id: string) => void;
+  onReturn: (rental: RentalWithDetails) => void;
   onDelete: (id: string) => void;
   onPageChange: (page: number) => void;
 }
@@ -46,6 +46,8 @@ const RentalList: FC<RentalListProps> = ({
     switch (status) {
       case "active":
         return "bg-blue-100 text-blue-800";
+      case "partial_return":
+        return "bg-yellow-100 text-yellow-800";
       case "returned":
         return "bg-green-100 text-green-800";
       case "overdue":
@@ -112,17 +114,17 @@ const RentalList: FC<RentalListProps> = ({
                 </td>
                 <td className="py-3 px-4 text-gray-700">
                   {rental.items && rental.items.length > 0 ? (
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {rental.items[0].product.name}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        Qty: {rental.items[0].quantity}
-                      </p>
-                      {rental.items.length > 1 && (
-                        <p className="text-xs text-gray-500">
-                          +{rental.items.length - 1} more
-                        </p>
+                    <div className="space-y-1">
+                      {rental.items.slice(0, 2).map((item, idx) => (
+                        <div key={idx} className="text-xs">
+                          <span className="font-medium text-gray-900">{item.product.name}</span>
+                          <span className="text-gray-600"> ({item.quantity} {item.product.unit})</span>
+                        </div>
+                      ))}
+                      {rental.items.length > 2 && (
+                        <div className="text-xs text-blue-600 font-medium">
+                          +{rental.items.length - 2} more
+                        </div>
                       )}
                     </div>
                   ) : (
@@ -145,11 +147,11 @@ const RentalList: FC<RentalListProps> = ({
                 </td>
                 <td className="py-3 px-4 text-right">
                   <div className="flex justify-end gap-2">
-                    {rental.status === "active" && (
+                    {(rental.status === "active" || rental.status === "partial_return") && (
                       <Button
                         variant="secondary"
                         size="sm"
-                        onClick={() => onReturn(rental.id)}
+                        onClick={() => onReturn(rental)}
                       >
                         Return
                       </Button>

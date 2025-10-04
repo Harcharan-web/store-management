@@ -49,13 +49,16 @@ const CustomerList: FC<CustomerListProps> = ({
                 Name
               </th>
               <th className="text-left py-3 px-4 font-semibold text-gray-900">
+                Short Name
+              </th>
+              <th className="text-left py-3 px-4 font-semibold text-gray-900">
                 Phone
               </th>
               <th className="text-left py-3 px-4 font-semibold text-gray-900">
-                Email
+                Address
               </th>
               <th className="text-left py-3 px-4 font-semibold text-gray-900">
-                Address
+                Location
               </th>
               <th className="text-right py-3 px-4 font-semibold text-gray-900">
                 Actions
@@ -66,12 +69,26 @@ const CustomerList: FC<CustomerListProps> = ({
             {customers.map((customer) => (
               <tr key={customer.id} className="border-b hover:bg-gray-50 transition-colors">
                 <td className="py-3 px-4 font-medium text-gray-900">{customer.name}</td>
+                <td className="py-3 px-4 text-gray-700">
+                  {customer.shortName || "-"}
+                </td>
                 <td className="py-3 px-4 text-gray-700">{customer.phone}</td>
                 <td className="py-3 px-4 text-gray-700">
-                  {customer.email || "-"}
-                </td>
-                <td className="py-3 px-4 text-gray-700">
                   {customer.address || "-"}
+                </td>
+                <td className="py-3 px-4">
+                  {customer.latitude && customer.longitude ? (
+                    <a
+                      href={`https://www.google.com/maps?q=${customer.latitude},${customer.longitude}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                    >
+                      📍 View Map
+                    </a>
+                  ) : (
+                    <span className="text-gray-400 text-sm">-</span>
+                  )}
                 </td>
                 <td className="py-3 px-4 text-right">
                   <div className="flex justify-end gap-2">

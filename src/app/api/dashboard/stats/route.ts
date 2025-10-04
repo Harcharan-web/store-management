@@ -41,15 +41,45 @@ export async function GET() {
       .from(sales)
       .where(gte(sales.createdAt, thirtyDaysAgo));
 
-    // Get low stock products count
-    const lowStockProducts = await db
-      .select({ id: products.id })
+    // Get all active products for stock analysis
+    const allProducts = await db
+      .select({
+        id: products.id,
+        name: products.name,
+        sku: products.sku,
+        currentStock: products.currentStock,
+        minStockLevel: products.minStockLevel,
+        unit: products.unit,
+        salePrice: products.salePrice,
+      })
       .from(products)
       .where(eq(products.isActive, true));
 
-    const lowStockCount = lowStockProducts.filter(
-      (p: any) => p.currentStock <= p.minStockLevel
+    // Filter low stock products
+    const lowStockCount = allProducts.filter(
+      (p) => p.currentStock && p.minStockLevel && p.currentStock <= p.minStockLevel
     ).length;
+
+    // Get stock summary (top 10 products sorted by stock level)
+    const stockSummary = allProducts
+      .filter((p) => p.currentStock !== null && p.minStockLevel !== null)
+      .sort((a, b) => {
+        // Sort by low stock first, then alphabetically
+        const aLow = (a.currentStock || 0) <= (a.minStockLevel || 0) ? 1 : 0;
+        const bLow = (b.currentStock || 0) <= (b.minStockLevel || 0) ? 1 : 0;
+        if (aLow !== bLow) return bLow - aLow;
+        return a.name.localeCompare(b.name);
+      })
+      .slice(0, 10)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        sku: p.sku || "",
+        currentStock: p.currentStock || 0,
+        minStockLevel: p.minStockLevel || 0,
+        unit: p.unit || "piece",
+        salePrice: p.salePrice || "0",
+      }));
 
     const stats = {
       totalProducts: totalProducts || 0,
@@ -57,6 +87,7 @@ export async function GET() {
       activeRentals: activeRentals || 0,
       recentSales: recentSales || 0,
       lowStockProducts: lowStockCount,
+      stockSummary,
     };
 
     return NextResponse.json<ApiResponse<typeof stats>>(

@@ -56,20 +56,11 @@ const ProductForm: FC<ProductFormProps> = ({ product, onSubmit, onCancel }) => {
       newErrors.unit = "Unit is required";
     }
 
-    if (formData.type === "sale" || formData.type === "both") {
-      if (!formData.salePrice) {
-        newErrors.salePrice = "Sale price is required for sale items";
-      }
-    }
+    // Sale price is optional - can be set later
 
     if (formData.type === "rent" || formData.type === "both") {
-      if (
-        !formData.rentPricePerDay &&
-        !formData.rentPricePerWeek &&
-        !formData.rentPricePerMonth
-      ) {
-        newErrors.rentPricePerDay =
-          "At least one rental price is required for rental items";
+      if (!formData.rentPricePerDay) {
+        newErrors.rentPricePerDay = "Rent price per day is required for rental items";
       }
     }
 
@@ -177,7 +168,7 @@ const ProductForm: FC<ProductFormProps> = ({ product, onSubmit, onCancel }) => {
           <h3 className="text-lg font-semibold mb-4">Sale Pricing</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Input
-              label="Sale Price *"
+              label="Sale Price"
               type="number"
               step="0.01"
               value={formData.salePrice}
@@ -204,26 +195,6 @@ const ProductForm: FC<ProductFormProps> = ({ product, onSubmit, onCancel }) => {
             />
 
             <Input
-              label="Rent Per Week"
-              type="number"
-              step="0.01"
-              value={formData.rentPricePerWeek}
-              onChange={(e) => handleChange("rentPricePerWeek", e.target.value)}
-              placeholder="0.00"
-            />
-
-            <Input
-              label="Rent Per Month"
-              type="number"
-              step="0.01"
-              value={formData.rentPricePerMonth}
-              onChange={(e) =>
-                handleChange("rentPricePerMonth", e.target.value)
-              }
-              placeholder="0.00"
-            />
-
-            <Input
               label="Security Deposit"
               type="number"
               step="0.01"
@@ -243,7 +214,10 @@ const ProductForm: FC<ProductFormProps> = ({ product, onSubmit, onCancel }) => {
           onChange={(e) => handleChange("isActive", e.target.checked)}
           className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
         />
-        <label htmlFor="isActive" className="text-sm font-semibold text-gray-800">
+        <label
+          htmlFor="isActive"
+          className="text-sm font-semibold text-gray-800"
+        >
           Active Product
         </label>
       </div>
@@ -253,7 +227,11 @@ const ProductForm: FC<ProductFormProps> = ({ product, onSubmit, onCancel }) => {
           Cancel
         </Button>
         <Button type="submit" disabled={submitting}>
-          {submitting ? "Saving..." : product ? "Update Product" : "Create Product"}
+          {submitting
+            ? "Saving..."
+            : product
+            ? "Update Product"
+            : "Create Product"}
         </Button>
       </div>
     </form>

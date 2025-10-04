@@ -90,13 +90,15 @@ export async function POST(request: NextRequest) {
       .insert(customers)
       .values({
         name: body.name,
-        email: body.email,
+        shortName: body.shortName || null,
         phone: body.phone,
-        address: body.address,
-        city: body.city,
-        state: body.state,
-        pincode: body.pincode,
-        notes: body.notes,
+        address: body.address || null,
+        latitude: body.latitude || null,
+        longitude: body.longitude || null,
+        city: body.city || null,
+        state: body.state || null,
+        pincode: body.pincode || null,
+        notes: body.notes || null,
       })
       .returning();
 
